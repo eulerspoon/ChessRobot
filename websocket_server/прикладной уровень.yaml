@@ -1,0 +1,287 @@
+openapi: 3.1.0
+info:
+  title: "Прикладной уровень — Шахматная роботизированная рука"
+  description: |
+    Система обмена сообщениями и телеметрией в реальном времени.
+
+    **Телеметрия:** роботизированная рука играет в шахматы.
+    Задаётся последовательность ходов в нотации.
+    Транслируется положение захвата, координаты фигуры на доске и статус захвата.
+    
+    **Прототип дизайна:** lichess.org
+  version: 1.0.0
+
+paths:
+  /api/send:
+    post:
+      tags:
+        - Методы прикладного уровня
+      summary: Отправить ход роботу
+      description: >
+        Получает от клиента JSON с данными о шахматном ходе
+        и отправляет их на транспортный уровень через HTTP-запрос.
+      operationId: send_message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessage'
+            example:
+              username: Оператор1
+              send_time: "2025-04-05T14:30:00"
+              type: text
+              data: Переместить пешку
+              move_notation: e2e4
+      responses:
+        '200':
+          description: Ход успешно отправлен на транспортный уровень
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendMessage'
+              example:
+                username: Оператор1
+                send_time: "2025-04-05T14:30:00"
+                type: text
+                data: Переместить пешку
+                move_notation: e2e4
+        '422':
+          description: Ошибка валидации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+
+  /api/receive:
+    post:
+      tags:
+        - Методы прикладного уровня
+      summary: Принять телеметрию от транспортного уровня
+      description: >
+        Ожидает POST-запросы от транспортного уровня.
+        Тело запроса — JSON с телеметрией робота: отправитель, время,
+        признак ошибки, положение захвата, координаты фигуры, статус.
+        Полученные данные рассылаются всем подключённым WebSocket-клиентам.
+      operationId: receive_message
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReceiveMessage'
+            example:
+              username: RobotArm
+              timestamp: "2025-04-05T14:30:05"
+              type: text
+              data: Ход e2e4 выполнен
+              error: null
+              move_notation: e2e4
+              gripper_position:
+                x: 150.0
+                y: 200.0
+                z: 50.0
+              target_piece_coordinates: e4
+              gripper_status: holding
+              move_success: true
+      responses:
+        '200':
+          description: Телеметрия доставлена всем подключённым операторам
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReceiveMessage'
+              example:
+                username: RobotArm
+                timestamp: "2025-04-05T14:30:05"
+                type: text
+                data: Ход e2e4 выполнен
+                error: null
+                move_notation: e2e4
+                gripper_position:
+                  x: 150.0
+                  y: 200.0
+                  z: 50.0
+                target_piece_coordinates: e4
+                gripper_status: holding
+                move_success: true
+        '422':
+          description: Ошибка валидации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HTTPValidationError'
+
+components:
+  schemas:
+    SendMessage:
+      type: object
+      title: SendMessage
+      description: Сообщение от оператора — шахматный ход для робота.
+      required:
+        - username
+      properties:
+        username:
+          type: string
+          minLength: 1
+          description: Имя оператора
+          examples:
+            - Оператор1
+        send_time:
+          type: string
+          description: Время отправки (ISO 8601)
+          examples:
+            - "2025-04-05T14:30:00"
+        type:
+          $ref: '#/components/schemas/MessageType'
+          default: text
+          description: "Тип сообщения: text или file"
+        data:
+          anyOf:
+            - type: string
+            - type: 'null'
+          description: Текст сообщения или base64-файл
+          examples:
+            - Переместить пешку
+        move_notation:
+          anyOf:
+            - type: string
+            - type: 'null'
+          description: Ход в шахматной нотации
+          examples:
+            - e2e4
+
+    ReceiveMessage:
+      type: object
+      title: ReceiveMessage
+      description: >
+        Телеметрия от робота.
+      required:
+        - username
+        - timestamp
+      properties:
+        username:
+          type: string
+          description: Имя отправителя (робот)
+          examples:
+            - RobotArm
+        timestamp:
+          type: string
+          description: Время отправки (ISO 8601)
+          examples:
+            - "2025-04-05T14:30:05"
+        type:
+          $ref: '#/components/schemas/MessageType'
+          default: text
+          description: Тип сообщения
+        data:
+          anyOf:
+            - type: string
+            - type: 'null'
+          description: Текст сообщения или base64-файл
+          examples:
+            - Ход e2e4 выполнен
+        error:
+          anyOf:
+            - type: string
+            - type: 'null'
+          description: >
+            Признак ошибки. Если не пустое —
+            в чате отображается иконка ошибки
+          examples:
+            - null
+        move_notation:
+          anyOf:
+            - type: string
+            - type: 'null'
+          description: Ход в шахматной нотации
+          examples:
+            - e2e4
+        gripper_position:
+          anyOf:
+            - $ref: '#/components/schemas/GripperPosition'
+            - type: 'null'
+          description: Координаты захвата (x, y, z) или углы поворотов
+        target_piece_coordinates:
+          anyOf:
+            - type: string
+            - type: 'null'
+          description: "Координаты фигуры на доске (например, 'e4')"
+          examples:
+            - e4
+        gripper_status:
+          anyOf:
+            - $ref: '#/components/schemas/GripperStatus'
+            - type: 'null'
+          description: "Статус захвата: opening / closing / holding / empty / error"
+        move_success:
+          anyOf:
+            - type: boolean
+            - type: 'null'
+          description: Флаг успешности выполнения хода в целом
+          examples:
+            - true
+
+    GripperPosition:
+      type: object
+      title: GripperPosition
+      description: Координаты захвата роботизированной руки (x, y, z)
+      required:
+        - x
+        - y
+        - z
+      properties:
+        x:
+          type: number
+          description: Координата X захвата (мм)
+          examples:
+            - 150.0
+        y:
+          type: number
+          description: Координата Y захвата (мм)
+          examples:
+            - 200.0
+        z:
+          type: number
+          description: Координата Z захвата (мм)
+          examples:
+            - 50.0
+
+    GripperStatus:
+      type: string
+      title: GripperStatus
+      description: Статус захвата роботизированной руки 
+      enum:
+        - opening
+        - closing
+        - holding
+        - empty
+        - error
+
+    MessageType:
+      type: string
+      title: MessageType
+      description: "Тип сообщения: текст или файл"
+      enum:
+        - text
+        - file
+
+    HTTPValidationError:
+      type: object
+      title: HTTPValidationError
+      properties:
+        detail:
+          type: array
+          items:
+            type: object
+            properties:
+              loc:
+                type: array
+                items:
+                  anyOf:
+                    - type: string
+                    - type: integer
+              msg:
+                type: string
+              type:
+                type: string
