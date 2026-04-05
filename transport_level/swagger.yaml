@@ -1,0 +1,251 @@
+openapi: 3.0.0
+info:
+  title: Transport Layer API (Robot Chess)
+  description: |
+    Транспортный уровень для системы роботизированной руки, играющей в шахматы.
+    
+    **Функции:**
+    - `POST /send` — получает шахматный ход от прикладного уровня, пересылает на агентный уровень (HTTP)
+    - `POST /transfer` — принимает сегменты телеметрии от агентного уровня, буферизирует, собирает и отправляет на прикладной уровень
+    
+    **Особенности:**
+    - Потеря сегментов с вероятностью R% (номер варианта) перед помещением в очередь
+    - Таймаут сборки: N секунд (3 цикла проверки без новых сегментов → сообщение с error=true)
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+    description: Транспортный сервис (Go + Kafka)
+
+paths:
+  /send:
+    post:
+      summary: Отправить шахматный ход на агентный уровень
+      description: |
+        Получает от прикладного уровня JSON с шахматным ходом и пересылает его на агентный уровень через HTTP.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - username
+                - send_time
+                - move_notation
+              properties:
+                username:
+                  type: string
+                  minLength: 1
+                  description: Имя оператора
+                  example: "Оператор1"
+                send_time:
+                  type: string
+                  format: date-time
+                  description: Время отправки хода (ISO 8601)
+                  example: "2025-04-05T14:30:00Z"
+                type:
+                  type: string
+                  enum: [text, file]
+                  description: Тип сообщения
+                  default: text
+                  example: "text"
+                data:
+                  type: string
+                  nullable: true
+                  description: Текстовое описание хода (опционально)
+                  example: "Пешка e2 на e4"
+                move_notation:
+                  type: string
+                  description: Ход в шахматной нотации
+                  example: "e2e4"
+      responses:
+        '200':
+          description: Ход успешно передан на агентный уровень
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+                  message:
+                    type: string
+                    example: "Move sent to agent successfully"
+        '400':
+          description: Некорректные данные запроса
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid request data"
+                  details:
+                    type: string
+                    example: "Missing required field: move_notation"
+        '500':
+          description: Ошибка при передаче на агентный уровень
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Agent service unavailable"
+                  details:
+                    type: string
+                    example: "Failed to forward move to agent"
+
+  /transfer:
+    post:
+      summary: Принять сегмент телеметрии от агентного уровня
+      description: |
+        Получает сегмент телеметрии от агентного уровня.
+        
+        **Алгоритм:**
+        1. С вероятностью R% сегмент теряется (не помещается в очередь) — симуляция потерь в сети
+        2. Если сегмент не потерян — помещается в буфер (очередь) по `message_id`
+        3. Раз в N секунд (например, 2 секунды) проверяется буфер:
+           - Если все сегменты собраны (`segment_number == total_segments`) — собирается полное сообщение
+           - Если прошло 3 цикла проверки без новых сегментов — сообщение собирается из имеющихся частей с `error: true`
+        4. Собранное сообщение отправляется на прикладной уровень (метод Receive)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - segment_number
+                - total_segments
+                - message_id
+                - send_time
+                - gripper_position
+                - piece_coordinates
+                - capture_status
+              properties:
+                segment_number:
+                  type: integer
+                  minimum: 1
+                  description: Номер текущего сегмента (начиная с 1)
+                  example: 1
+                total_segments:
+                  type: integer
+                  minimum: 1
+                  description: Общее количество сегментов в сообщении
+                  example: 3
+                message_id:
+                  type: string
+                  description: Уникальный ID сообщения (используется send_time)
+                  example: "2025-04-05T14:30:00.123Z"
+                send_time:
+                  type: string
+                  format: date-time
+                  description: Время создания сегмента (ISO 8601)
+                  example: "2025-04-05T14:30:00.123Z"
+                gripper_position:
+                  type: object
+                  required:
+                    - x
+                    - y
+                    - z
+                  properties:
+                    x:
+                      type: number
+                      format: float
+                      description: Координата X положения захвата (мм)
+                      example: 120.5
+                    y:
+                      type: number
+                      format: float
+                      description: Координата Y положения захвата (мм)
+                      example: 85.3
+                    z:
+                      type: number
+                      format: float
+                      description: Координата Z положения захвата (мм)
+                      example: 30.0
+                  description: Положение захвата роботизированной руки
+                piece_coordinates:
+                  type: object
+                  required:
+                    - from_x
+                    - from_y
+                    - to_x
+                    - to_y
+                  properties:
+                    from_x:
+                      type: integer
+                      minimum: 0
+                      maximum: 7
+                      description: Начальная колонка фигуры (0-7, где 0=a)
+                      example: 4
+                    from_y:
+                      type: integer
+                      minimum: 0
+                      maximum: 7
+                      description: Начальная строка фигуры (0-7, где 0=1)
+                      example: 1
+                    to_x:
+                      type: integer
+                      minimum: 0
+                      maximum: 7
+                      description: Конечная колонка фигуры
+                      example: 4
+                    to_y:
+                      type: integer
+                      minimum: 0
+                      maximum: 7
+                      description: Конечная строка фигуры
+                      example: 3
+                  description: Координаты перемещаемой фигуры на доске
+                capture_status:
+                  type: object
+                  required:
+                    - success
+                    - piece_type
+                  properties:
+                    success:
+                      type: boolean
+                      description: Успешен ли захват фигуры
+                      example: true
+                    piece_type:
+                      type: string
+                      enum: [pawn, knight, bishop, rook, queen, king, none]
+                      description: Тип захваченной фигуры
+                      example: "pawn"
+                  description: Статус захвата фигуры
+      responses:
+        '200':
+          description: Сегмент принят (или искусственно потерян с вероятностью R%)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "success"
+                  segment_number:
+                    type: integer
+                    example: 1
+                  lost:
+                    type: boolean
+                    description: true — сегмент был искусственно потерян (с вероятностью R%)
+                    example: false
+        '400':
+          description: Некорректные данные сегмента
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+                    example: "Invalid segment data"
+                  details:
+                    type: string
+                    example: "segment_number must be >= 1"
