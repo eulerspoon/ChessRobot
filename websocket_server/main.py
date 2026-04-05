@@ -1,8 +1,6 @@
 """
 Прикладной уровень — WebSocket-сервер на FastAPI.
-Вариант 9: Роботизированная рука играет в шахматы.
 
-Swagger UI:  http://localhost:8001/docs
 """
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -19,8 +17,8 @@ HOST = "0.0.0.0"
 PORT = 8001
 
 TRANSPORT_LEVEL_HOST = "192.168.1.100"
-TRANSPORT_LEVEL_PORT = 8002
-TRANSPORT_LEVEL_URL = f"http://{TRANSPORT_LEVEL_HOST}:{TRANSPORT_LEVEL_PORT}/api/send"
+TRANSPORT_LEVEL_PORT = 8080
+TRANSPORT_LEVEL_URL = f"http://{TRANSPORT_LEVEL_HOST}:{TRANSPORT_LEVEL_PORT}/send"
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("app-level")
@@ -28,12 +26,10 @@ logger = logging.getLogger("app-level")
 app = FastAPI(
     title="Прикладной уровень — Шахматная роботизированная рука",
     description=(
-        "## Вариант 9\n\n"
         "Система обмена сообщениями и телеметрией в реальном времени.\n\n"
         "**Телеметрия:** роботизированная рука играет в шахматы. "
         "Задаётся последовательность ходов в нотации. "
         "Транслируется положение захвата, координаты фигуры на доске и статус захвата.\n\n"
-        "**WebSocket:** `ws://hostname:8001/ws?username=ИмяОператора`\n\n"
         "**Прототип дизайна:** lichess.org"
     ),
     version="1.0.0",
@@ -107,7 +103,6 @@ async def send_to_transport_level(message: dict) -> dict:
         return message
 
 
-
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket, username: str):
     """
@@ -144,7 +139,7 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
     summary="Отправить ход роботу",
     description=(
         "Получает от клиента JSON с данными о шахматном ходе "
-        "и отправляет их на транспортный уровень через HTTP-запрос. "
+        "и отправляет их на транспортный уровень через HTTP-запрос."
     ),
     responses={
         200: {
@@ -154,9 +149,9 @@ async def websocket_endpoint(websocket: WebSocket, username: str):
                     "example": {
                         "username": "Оператор1",
                         "send_time": "2025-04-05T14:30:00",
-                        "type": "text",
                         "data": "Переместить пешку",
-                        "move_notation": "e2e4"
+                        "move_notation": "e2e4",
+                        "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
                     }
                 }
             }
@@ -177,7 +172,7 @@ async def send_message(message: SendMessage):
     description=(
         "Ожидает POST-запросы от транспортного уровня. "
         "Тело запроса — JSON с телеметрией робота: отправитель, время, "
-        "признак ошибки, положение захвата, координаты фигуры, статус. "
+        "признак ошибки, положение захвата, статус. "
         "Полученные данные рассылаются всем подключённым WebSocket-клиентам."
     ),
     responses={
@@ -188,14 +183,13 @@ async def send_message(message: SendMessage):
                     "example": {
                         "username": "RobotArm",
                         "timestamp": "2025-04-05T14:30:05",
-                        "type": "text",
                         "data": "Ход e2e4 выполнен",
                         "error": None,
                         "move_notation": "e2e4",
-                        "gripper_position": {"x": 150.0, "y": 200.0, "z": 50.0},
-                        "target_piece_coordinates": "e4",
+                        "gripper_position": {"x": 150.0, "y": 200.0},
                         "gripper_status": "holding",
-                        "move_success": True
+                        "move_success": True,
+                        "fen": "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
                     }
                 }
             }
@@ -206,7 +200,6 @@ async def receive_message(message: ReceiveMessage):
     msg_dict = message.model_dump(mode="json")
     await manager.broadcast(msg_dict)
     return message
-
 
 
 if __name__ == "__main__":

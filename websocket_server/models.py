@@ -5,7 +5,7 @@ from datetime import datetime
 
 
 class GripperStatus(str, Enum):
-    """Статус захвата роботизированной руки """
+    """Статус захвата роботизированной руки"""
     OPENING = "opening"
     CLOSING = "closing"
     HOLDING = "holding"
@@ -13,19 +13,10 @@ class GripperStatus(str, Enum):
     ERROR = "error"
 
 
-class MessageType(str, Enum):
-    """Тип сообщения: текст или файл"""
-    TEXT = "text"
-    FILE = "file"
-
-
-
 class GripperPosition(BaseModel):
-    """Координаты захвата роботизированной руки (x, y, z)"""
+    """Координаты захвата роботизированной руки (x, y)"""
     x: float = Field(..., description="Координата X захвата (мм)", examples=[150.0])
     y: float = Field(..., description="Координата Y захвата (мм)", examples=[200.0])
-    z: float = Field(..., description="Координата Z захвата (мм)", examples=[50.0])
-
 
 
 class SendMessage(BaseModel):
@@ -42,13 +33,9 @@ class SendMessage(BaseModel):
         description="Время отправки (ISO 8601)",
         examples=["2025-04-05T14:30:00"]
     )
-    type: MessageType = Field(
-        default=MessageType.TEXT,
-        description="Тип сообщения: text или file"
-    )
     data: Optional[str] = Field(
         None,
-        description="Текст сообщения или base64-файл",
+        description="Текст сообщения",
         examples=["Переместить пешку"]
     )
     move_notation: Optional[str] = Field(
@@ -56,11 +43,17 @@ class SendMessage(BaseModel):
         description="Ход в шахматной нотации",
         examples=["e2e4"]
     )
-
+    fen: Optional[str] = Field(
+        None,
+        description="Актуальная позиция на доске в формате FEN",
+        examples=["rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"]
+    )
 
 
 class ReceiveMessage(BaseModel):
-
+    """
+    Телеметрия от робота.
+    """
     username: str = Field(
         ...,
         description="Имя отправителя (робот)",
@@ -71,13 +64,9 @@ class ReceiveMessage(BaseModel):
         description="Время отправки (ISO 8601)",
         examples=["2025-04-05T14:30:05"]
     )
-    type: MessageType = Field(
-        default=MessageType.TEXT,
-        description="Тип сообщения"
-    )
     data: Optional[str] = Field(
         None,
-        description="Текст сообщения или base64-файл",
+        description="Текст сообщения",
         examples=["Ход e2e4 выполнен"]
     )
     error: Optional[str] = Field(
@@ -92,12 +81,7 @@ class ReceiveMessage(BaseModel):
     )
     gripper_position: Optional[GripperPosition] = Field(
         None,
-        description="Координаты захвата (x, y, z) или углы поворотов"
-    )
-    target_piece_coordinates: Optional[str] = Field(
-        None,
-        description="Координаты фигуры на доске (например, 'e4')",
-        examples=["e4"]
+        description="Координаты захвата (x, y)"
     )
     gripper_status: Optional[GripperStatus] = Field(
         None,
@@ -107,4 +91,9 @@ class ReceiveMessage(BaseModel):
         None,
         description="Флаг успешности выполнения хода в целом",
         examples=[True]
+    )
+    fen: Optional[str] = Field(
+        None,
+        description="Позиция на доске в формате FEN",
+        examples=["rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"]
     )

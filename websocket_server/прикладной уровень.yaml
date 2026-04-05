@@ -7,7 +7,7 @@ info:
     **Телеметрия:** роботизированная рука играет в шахматы.
     Задаётся последовательность ходов в нотации.
     Транслируется положение захвата, координаты фигуры на доске и статус захвата.
-    
+
     **Прототип дизайна:** lichess.org
   version: 1.0.0
 
@@ -30,9 +30,9 @@ paths:
             example:
               username: Оператор1
               send_time: "2025-04-05T14:30:00"
-              type: text
               data: Переместить пешку
               move_notation: e2e4
+              fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
       responses:
         '200':
           description: Ход успешно отправлен на транспортный уровень
@@ -43,9 +43,9 @@ paths:
               example:
                 username: Оператор1
                 send_time: "2025-04-05T14:30:00"
-                type: text
                 data: Переместить пешку
                 move_notation: e2e4
+                fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
         '422':
           description: Ошибка валидации
           content:
@@ -61,7 +61,7 @@ paths:
       description: >
         Ожидает POST-запросы от транспортного уровня.
         Тело запроса — JSON с телеметрией робота: отправитель, время,
-        признак ошибки, положение захвата, координаты фигуры, статус.
+        признак ошибки, положение захвата, статус.
         Полученные данные рассылаются всем подключённым WebSocket-клиентам.
       operationId: receive_message
       requestBody:
@@ -73,17 +73,15 @@ paths:
             example:
               username: RobotArm
               timestamp: "2025-04-05T14:30:05"
-              type: text
               data: Ход e2e4 выполнен
               error: null
               move_notation: e2e4
               gripper_position:
                 x: 150.0
                 y: 200.0
-                z: 50.0
-              target_piece_coordinates: e4
               gripper_status: holding
               move_success: true
+              fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
       responses:
         '200':
           description: Телеметрия доставлена всем подключённым операторам
@@ -94,17 +92,15 @@ paths:
               example:
                 username: RobotArm
                 timestamp: "2025-04-05T14:30:05"
-                type: text
                 data: Ход e2e4 выполнен
                 error: null
                 move_notation: e2e4
                 gripper_position:
                   x: 150.0
                   y: 200.0
-                  z: 50.0
-                target_piece_coordinates: e4
                 gripper_status: holding
                 move_success: true
+                fen: "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
         '422':
           description: Ошибка валидации
           content:
@@ -132,15 +128,11 @@ components:
           description: Время отправки (ISO 8601)
           examples:
             - "2025-04-05T14:30:00"
-        type:
-          $ref: '#/components/schemas/MessageType'
-          default: text
-          description: "Тип сообщения: text или file"
         data:
           anyOf:
             - type: string
             - type: 'null'
-          description: Текст сообщения или base64-файл
+          description: Текст сообщения
           examples:
             - Переместить пешку
         move_notation:
@@ -150,12 +142,18 @@ components:
           description: Ход в шахматной нотации
           examples:
             - e2e4
+        fen:
+          anyOf:
+            - type: string
+            - type: 'null'
+          description: Актуальная позиция на доске в формате FEN
+          examples:
+            - "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
 
     ReceiveMessage:
       type: object
       title: ReceiveMessage
-      description: >
-        Телеметрия от робота.
+      description: Телеметрия от робота.
       required:
         - username
         - timestamp
@@ -170,15 +168,11 @@ components:
           description: Время отправки (ISO 8601)
           examples:
             - "2025-04-05T14:30:05"
-        type:
-          $ref: '#/components/schemas/MessageType'
-          default: text
-          description: Тип сообщения
         data:
           anyOf:
             - type: string
             - type: 'null'
-          description: Текст сообщения или base64-файл
+          description: Текст сообщения
           examples:
             - Ход e2e4 выполнен
         error:
@@ -201,14 +195,7 @@ components:
           anyOf:
             - $ref: '#/components/schemas/GripperPosition'
             - type: 'null'
-          description: Координаты захвата (x, y, z) или углы поворотов
-        target_piece_coordinates:
-          anyOf:
-            - type: string
-            - type: 'null'
-          description: "Координаты фигуры на доске (например, 'e4')"
-          examples:
-            - e4
+          description: Координаты захвата (x, y)
         gripper_status:
           anyOf:
             - $ref: '#/components/schemas/GripperStatus'
@@ -221,15 +208,21 @@ components:
           description: Флаг успешности выполнения хода в целом
           examples:
             - true
+        fen:
+          anyOf:
+            - type: string
+            - type: 'null'
+          description: Позиция на доске в формате FEN
+          examples:
+            - "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq e3 0 1"
 
     GripperPosition:
       type: object
       title: GripperPosition
-      description: Координаты захвата роботизированной руки (x, y, z)
+      description: Координаты захвата роботизированной руки (x, y)
       required:
         - x
         - y
-        - z
       properties:
         x:
           type: number
@@ -241,30 +234,17 @@ components:
           description: Координата Y захвата (мм)
           examples:
             - 200.0
-        z:
-          type: number
-          description: Координата Z захвата (мм)
-          examples:
-            - 50.0
 
     GripperStatus:
       type: string
       title: GripperStatus
-      description: Статус захвата роботизированной руки 
+      description: Статус захвата роботизированной руки
       enum:
         - opening
         - closing
         - holding
         - empty
         - error
-
-    MessageType:
-      type: string
-      title: MessageType
-      description: "Тип сообщения: текст или файл"
-      enum:
-        - text
-        - file
 
     HTTPValidationError:
       type: object
